@@ -1,0 +1,212 @@
+import pandas as pd
+import numpy as np
+import seaborn as sns
+from datetime import datetime
+import matplotlib.pyplot as plt
+
+data = pd.read_csv(r'/content/games_details.csv')
+
+data.columns
+
+df = pd.DataFrame(data, columns= ['GAME_ID', 'TEAM_ID', 'TEAM_ABBREVIATION', 'TEAM_CITY', 'PLAYER_ID',
+       'PLAYER_NAME', 'START_POSITION', 'COMMENT', 'MIN', 'FGM', 'FGA',
+       'FG_PCT', 'FG3M', 'FG3A', 'FG3_PCT', 'FTM', 'FTA', 'FT_PCT', 'OREB',
+       'DREB', 'REB', 'AST', 'STL', 'BLK', 'TO', 'PF', 'PTS', 'PLUS_MINUS'])
+       
+       
+df.dtypes
+
+df['GAME_ID'] = df['GAME_ID'].astype(str)
+df['TEAM_ID'] = df['TEAM_ID'].astype(str)
+df['PLAYER_ID'] = df['PLAYER_ID'].astype(str)
+
+
+##
+plt.figure(figsize=(16,10))
+sns.heatmap(df.isnull())
+
+
+df = df[df['PLUS_MINUS'].notna()]
+del df["COMMENT"]
+del df["START_POSITION"]
+
+
+plt.figure(figsize=(16,10))
+
+sns.heatmap(df.isnull())
+
+
+df['MIN']= '00:' + df['MIN']
+df['MIN'] = pd.to_timedelta(df['MIN'])
+
+
+#grouped rows by teamid and game id
+teamdf = df.groupby(['GAME_ID', 'TEAM_ID']).sum().reset_index()
+
+#'FG2M', 'FG2A', 'FG2_PCT' #These values were incorrect as they should not be summed
+teamdf[['FG3_PCT']] = teamdf['FG3M'].div(teamdf['FG3A'].values,axis=0)
+teamdf[['FG_PCT']] = teamdf['FGM'].div(teamdf['FGA'].values,axis=0)
+teamdf[['FT_PCT']] = teamdf['FTM'].div(teamdf['FTA'].values,axis=0)
+
+
+teamdf = teamdf.groupby(['GAME_ID', 'TEAM_ID']).sum().reset_index()
+#add point differential to columns
+teamdf['PTDIFFERENTIAL'] = teamdf['PLUS_MINUS']/5
+       
+       
+teamdf.loc[(teamdf.PTDIFFERENTIAL > 0), 'RESULT'] = 'W'
+
+teamdf.loc[(teamdf.PTDIFFERENTIAL < 0), 'RESULT'] = 'L'
+teamdf = teamdf.reset_index()
+
+
+
+
+corr = teamdf.corr()
+plt.figure(figsize=(16,10))
+ax = sns.heatmap(
+    corr, 
+    vmin=-1, vmax=1, center=0,
+    cmap=sns.diverging_palette(2500, 5000, n=20000),
+    square=True
+)
+ax.set_xticklabels(
+    ax.get_xticklabels(),
+    rotation=45,
+    horizontalalignment='right'
+);
+
+
+plt.figure(figsize=(8,5))
+
+boxplot = teamdf.boxplot(column=['FG_PCT', 'FG3_PCT', 'FT_PCT'])
+
+
+
+plt.figure(figsize=(20,20))
+wanted_columns = ['FGM', 'FGA',  'FG3M', 'FG3A'
+       , 'FTM', 'FTA', 'OREB', 'DREB', 'REB', 'AST', 'STL',
+       'BLK', 'TO', 'PF', 'PTS']
+boxplot = teamdf[wanted_columns].boxplot()
+
+
+wanted_columns = ['FGM', 'FGA', 'FG_PCT', 'FG3M', 'FG3A',
+       'FG3_PCT', 'FTM', 'FTA', 'FT_PCT', 'OREB', 'DREB', 'REB', 'AST', 'STL',
+       'BLK', 'TO', 'PF', 'PTS']
+teamdf[wanted_columns].hist(bins=40, figsize=(20, 20),color=2500)
+
+
+sns.countplot(x='RESULT',data=teamdf, palette='Paired')
+plt.show()
+#plt.savefig('Wins and Losses plot')
+
+
+teamdf[teamdf.RESULT =='W'].PTS.hist()#blue
+teamdf[teamdf.RESULT =='L'].PTS.hist(color = 'pink')#orange
+
+
+wanted_columns = ['FGM', 'FGA', 'FG_PCT', 'FG3M', 'FG3A',
+       'FG3_PCT', 'FTM', 'FTA', 'FT_PCT', 'OREB', 'DREB', 'REB', 'AST', 'STL',
+       'BLK', 'TO', 'PF', 'PTS']
+teamdf_melt = teamdf.melt(id_vars = 'RESULT',
+                  value_vars = wanted_columns,
+                  var_name = 'columns')
+                  
+                  
+plt.figure(figsize=(20,20))
+
+b = sns.boxplot(data = teamdf_melt,
+                hue = 'RESULT', 
+                x = 'columns',
+                y = 'value',
+                order = ['FGM', 'FGA', 'FG3M', 'FG3A'
+       , 'FTM', 'FTA', 'OREB', 'DREB', 'REB', 'AST', 'STL',
+       'BLK', 'TO', 'PF', 'PTS']
+       ,color = 'Skyblue')
+
+plt.show()
+
+
+teamdf['TEAM_CITY'] = df['TEAM_CITY']
+
+wanted_columns = ['FGM', 'FGA', 'FG_PCT', 'FG3M', 'FG3A',
+       'FG3_PCT', 'FTM', 'FTA', 'FT_PCT', 'OREB', 'DREB', 'REB', 'AST', 'STL',
+       'BLK', 'TO', 'PF', 'PTS','TEAM_CITY']
+#visualize each column by team
+teamdf[wanted_columns].groupby('TEAM_CITY').mean()
+
+
+
+
+plt.scatter(teamdf['FGM'],teamdf.RESULT)
+
+
+teamdf['RESULT'].replace({'W':1,'L':'0'},inplace = True)
+
+
+new_teamdf = teamdf[['FGM', 'FGA', 'FG_PCT',
+       'FG3M', 'FG3A', 'FG3_PCT', 'FTM', 'FTA', 'FT_PCT', 'OREB', 'DREB',
+       'REB', 'AST', 'STL', 'BLK', 'TO', 'PF', 'PTS','TEAM_CITY','RESULT']]
+
+#X = pd.get_dummies(teamdf['TEAM_CITY'])
+
+
+wanted_columns = ['FGM', 'FGA', 'FG_PCT',
+       'FG3M', 'FG3A', 'FG3_PCT', 'FTM', 'FTA', 'FT_PCT', 'OREB', 'DREB',
+       'REB', 'AST', 'STL', 'BLK', 'TO', 'PF', 'PTS','TEAM_CITY']
+X = pd.get_dummies(new_teamdf[wanted_columns])
+
+X.head()
+
+y = new_teamdf['RESULT']
+y=y.astype('int')
+
+
+from sklearn.model_selection import train_test_split
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.35, random_state=0)
+          
+display(X_train.shape, y_train.shape, X_test.shape, y_test.shape)
+
+
+
+
+from sklearn.linear_model import LogisticRegression
+
+lr = LogisticRegression(max_iter=1000)
+
+lr.fit(X_train, y_train)
+
+
+
+y_pred=lr.predict(X_test)
+
+
+#Confusion Matrix
+import sklearn.metrics as metrics
+
+cnf_matrix = metrics.confusion_matrix(y_test, y_pred)
+cnf_matrix
+
+
+
+cnf_matrix = pd.crosstab(y_test, y_pred, rownames=['Actual'],colnames=['Predicted'])
+sns.heatmap(cnf_matrix,annot=True,cmap='Blues',fmt='g')
+
+
+
+accuracyScore = metrics.accuracy_score(y_test,y_pred)
+print('Accuracy Score: ', accuracyScore)
+print('Accuracy Score in Percentage :' ,int(accuracyScore*100),'%')
+
+
+
+lr.coef_
+
+
+
+from statsmodels.api import OLS
+wanted_columns = ['FGM', 'FGA', 'FG_PCT',
+       'FG3M', 'FG3A', 'FG3_PCT', 'FTM', 'FTA', 'FT_PCT', 'OREB', 'DREB',
+       'REB', 'AST', 'STL', 'BLK', 'TO', 'PF', 'PTS','TEAM_CITY']
+OLS(y,X).fit().summary()
